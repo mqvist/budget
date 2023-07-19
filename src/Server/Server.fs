@@ -7,37 +7,39 @@ open Saturn
 open Shared
 
 module Storage =
-    let todos = ResizeArray()
+    let accounts = ResizeArray()
+    let transactions = ResizeArray()
 
-    let addTodo (todo: Todo) =
-        if Todo.isValid todo.Description then
-            todos.Add todo
+    let addAccount (account: Account) = accounts.Add account
+
+    let addTransaction transaction =
+        if Transaction.isValid transaction then
+            transactions.Add transaction
             Ok()
         else
-            Error "Invalid todo"
+            Error "Invalid transaction"
 
     do
-        addTodo (Todo.create "Create new SAFE project")
+        let account = Account.create "Käyttötili"
+        addAccount (account)
+
+        Transaction.createOutflow account.Id (Money 100) "test"
+        |> addTransaction
+        |> Result.mapError (fun error -> failwith error)
         |> ignore
 
-        addTodo (Todo.create "Write your app") |> ignore
-        addTodo (Todo.create "Ship it !!!") |> ignore
+        Transaction.createInflow account.Id (Money 100) "test"
+        |> addTransaction
+        |> Result.mapError (fun error -> failwith error)
+        |> ignore
 
-let todosApi =
-    { getTodos = fun () -> async { return Storage.todos |> List.ofSeq }
-      addTodo =
-        fun todo ->
-            async {
-                return
-                    match Storage.addTodo todo with
-                    | Ok () -> todo
-                    | Error e -> failwith e
-            } }
+let budgetApi =
+    { getTransactions = fun () -> async { return Storage.transactions |> List.ofSeq } }
 
 let webApp =
     Remoting.createApi ()
     |> Remoting.withRouteBuilder Route.builder
-    |> Remoting.fromValue todosApi
+    |> Remoting.fromValue budgetApi
     |> Remoting.buildHttpHandler
 
 let app =

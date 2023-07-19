@@ -2,37 +2,47 @@ namespace Shared
 
 open System
 
-type Todo = { Id: Guid; Description: string }
-
 type Money = decimal
 type Account = { Id: Guid; Name: string }
-type Outflow = { FromAccount: Guid }
-type Inflow = { ToAccount: Guid }
-type Transfer = { FromAccount: Guid; ToAccount: Guid }
 
 type TransactionType =
-    | Outflow
-    | Inflow
-    | Transfer
+    | Outflow of fromAccount: Guid
+    | Inflow of toAccount: Guid
+    | Transfer of fromAccount: Guid * toAccount: Guid
 
 type Transaction =
     { Id: Guid
+      Date: DateOnly
       Amount: Money
       Type: TransactionType
       Comment: string }
 
-module Todo =
-    let isValid (description: string) =
-        String.IsNullOrWhiteSpace description |> not
+module Account =
+    let create (name: string) = { Id = Guid.NewGuid(); Name = name }
 
-    let create (description: string) =
+module Transaction =
+    let isValid t =
+        (t.Amount = Money 0
+         || String.IsNullOrWhiteSpace t.Comment)
+        |> not
+
+    let createOutflow fromAccount amount comment =
         { Id = Guid.NewGuid()
-          Description = description }
+          Date = DateOnly.FromDateTime(DateTime.Now)
+          Amount = amount
+          Type = Outflow(fromAccount)
+          Comment = comment }
+
+    let createInflow toAccount amount comment =
+        { Id = Guid.NewGuid()
+          Date = DateOnly.FromDateTime(DateTime.Now)
+          Amount = amount
+          Type = Inflow(toAccount)
+          Comment = comment }
 
 module Route =
     let builder typeName methodName =
         sprintf "/api/%s/%s" typeName methodName
 
-type ITodosApi =
-    { getTodos: unit -> Async<Todo list>
-      addTodo: Todo -> Async<Todo> }
+type IBudgetApi =
+    { getTransactions: unit -> Async<Transaction list> }
