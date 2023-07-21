@@ -2,7 +2,9 @@ module Index
 
 open Elmish
 open Fable.Remoting.Client
+open Fable.Core.JsInterop
 open Shared
+importAll "./css/tailwind.css"
 
 type Model = { Transactions: Transaction list }
 
