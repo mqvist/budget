@@ -3,12 +3,13 @@ namespace Shared
 open System
 
 type Money = decimal
-type Account = { Id: Guid; Name: string }
+type AccountId = Guid
+type Account = { Id: AccountId; Name: string }
 
 type TransactionType =
-    | Outflow of fromAccount: Guid
-    | Inflow of toAccount: Guid
-    | Transfer of fromAccount: Guid * toAccount: Guid
+    | Outflow of fromAccountId: Guid * payee: string
+    | Inflow of toAccountId: Guid * payee: string
+    | Transfer of fromAccountId: Guid * toAccountId: Guid
 
 type Transaction =
     { Id: Guid
@@ -26,18 +27,25 @@ module Transaction =
          || String.IsNullOrWhiteSpace t.Comment)
         |> not
 
-    let createOutflow fromAccount amount comment =
+    let createOutflow fromAccountId payee amount comment =
         { Id = Guid.NewGuid()
           Date = DateOnly.FromDateTime(DateTime.Now)
           Amount = amount
-          Type = Outflow(fromAccount)
+          Type = Outflow(fromAccountId, payee)
           Comment = comment }
 
-    let createInflow toAccount amount comment =
+    let createInflow toAccountId payee amount comment =
         { Id = Guid.NewGuid()
           Date = DateOnly.FromDateTime(DateTime.Now)
           Amount = amount
-          Type = Inflow(toAccount)
+          Type = Inflow(toAccountId, payee)
+          Comment = comment }
+
+    let createTransfer fromAccountId toAccountId amount comment =
+        { Id = Guid.NewGuid()
+          Date = DateOnly.FromDateTime(DateTime.Now)
+          Amount = amount
+          Type = Transfer(fromAccountId, toAccountId)
           Comment = comment }
 
 module Route =
@@ -45,4 +53,5 @@ module Route =
         sprintf "/api/%s/%s" typeName methodName
 
 type IBudgetApi =
-    { getTransactions: unit -> Async<Transaction list> }
+    { getAccounts: unit -> Async<Account list>
+      getTransactions: AccountId -> Async<AccountId * Transaction list> }

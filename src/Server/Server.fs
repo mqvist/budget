@@ -19,22 +19,41 @@ module Storage =
         else
             Error "Invalid transaction"
 
+    let getTransactions accountId =
+        transactions
+        |> Seq.filter (fun transaction ->
+            match transaction.Type with
+            | Inflow (fromAccountId, _) -> fromAccountId = accountId
+            | Outflow (toAccountId, _) -> toAccountId = accountId
+            | Transfer (fromAccountId, toAccountId) ->
+                toAccountId = accountId
+                || fromAccountId = accountId)
+
     do
-        let account = Account.create "Käyttötili"
-        addAccount (account)
+        let account1 = Account.create "Käyttötili"
+        addAccount (account1)
+        let account2 = Account.create "Dummy"
+        addAccount (account2)
 
-        Transaction.createOutflow account.Id (Money 100) "test"
+        Transaction.createOutflow account1.Id "Mika" (Money 100) "test"
         |> addTransaction
         |> Result.mapError (fun error -> failwith error)
         |> ignore
 
-        Transaction.createInflow account.Id (Money 100) "test"
+        Transaction.createInflow account1.Id "EB" (Money 100) "test"
         |> addTransaction
         |> Result.mapError (fun error -> failwith error)
         |> ignore
+
+        Transaction.createTransfer account1.Id account2.Id (Money 50) "Transfer"
+        |> addTransaction
+        |> Result.mapError (fun error -> failwith error)
+        |> ignore
+
 
 let budgetApi =
-    { getTransactions = fun () -> async { return Storage.transactions |> List.ofSeq } }
+    { getAccounts = fun () -> async { return Storage.accounts |> List.ofSeq }
+      getTransactions = fun accountId -> async { return (accountId, Storage.getTransactions accountId |> List.ofSeq) } }
 
 let webApp =
     Remoting.createApi ()
