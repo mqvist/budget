@@ -115,7 +115,51 @@ let EditableTd (value: string) dispatch =
             ]
     ]
 
-let viewActiveAccount model (dispatch: Msg -> unit) =
+let renderTransactions info dispatch =
+    Html.tbody [
+        for transaction in info.Transactions do
+            Html.tr [
+                prop.onClick (fun _ -> SelectActiveTransaction transaction |> dispatch)
+                // Highlight active transaction
+                if Some transaction = info.ActiveTransaction then
+                    prop.classes [
+                        $"bg-[{activeTransactionColor}]"
+                    ]
+                prop.children [
+                    Html.td (formatDate transaction.Date)
+                    match transaction.Type with
+                    | Inflow (_, payee)
+                    | Outflow (_, payee) -> EditableTd payee dispatch
+                    | Transfer (fromAccountId, toAccountId) ->
+                        if info.ActiveAccount.Id = fromAccountId then
+                            let toAccount = info.getAccount toAccountId
+                            Html.td $"Transfer to {toAccount.Name}"
+                        else
+                            let fromAccount = info.getAccount fromAccountId
+                            Html.td $"Transfer from {fromAccount.Name}"
+
+                    Html.td "category"
+                    EditableTd transaction.Comment dispatch
+
+                    match transaction.Type with
+                    | Inflow _ ->
+                        Html.td ""
+                        Html.td (transaction.Amount.ToString())
+                    | Outflow _ ->
+                        Html.td (transaction.Amount.ToString())
+                        Html.td ""
+                    | Transfer (fromAccountId, _) when fromAccountId = info.ActiveAccount.Id ->
+                        Html.td (transaction.Amount.ToString())
+                        Html.td ""
+                    | Transfer (_, toAccountId) when toAccountId = info.ActiveAccount.Id ->
+                        Html.td ""
+                        Html.td (transaction.Amount.ToString())
+                    | Transfer _ -> failwith "Not Implemented"
+                ]
+            ]
+    ]
+
+let renderMainView model (dispatch: Msg -> unit) =
     match model with
     | NoAccounts -> Bulma.title "No accounts"
     | AccountsLoaded _ -> Html.none
@@ -137,72 +181,43 @@ let viewActiveAccount model (dispatch: Msg -> unit) =
                                 Html.th "Inflow"
                             ]
                         ]
-                        Html.tbody [
-                            for transaction in info.Transactions do
-                                Html.tr [
-                                    prop.onClick (fun _ -> SelectActiveTransaction transaction |> dispatch)
-                                    // Highlight active transaction
-                                    if Some transaction = info.ActiveTransaction then
-                                        prop.classes [
-                                            $"bg-[{activeTransactionColor}]"
-                                        ]
-                                    prop.children [
-                                        Html.td (formatDate transaction.Date)
-                                        match transaction.Type with
-                                        | Inflow (_, payee)
-                                        | Outflow (_, payee) -> EditableTd payee dispatch
-                                        | Transfer (fromAccountId, toAccountId) ->
-                                            if info.ActiveAccount.Id = fromAccountId then
-                                                let toAccount = info.getAccount toAccountId
-                                                Html.td $"Transfer to {toAccount.Name}"
-                                            else
-                                                let fromAccount = info.getAccount fromAccountId
-                                                Html.td $"Transfer from {fromAccount.Name}"
-
-                                        Html.td "category"
-                                        EditableTd transaction.Comment dispatch
-
-                                        match transaction.Type with
-                                        | Inflow _ ->
-                                            Html.td ""
-                                            Html.td (transaction.Amount.ToString())
-                                        | Outflow _ ->
-                                            Html.td (transaction.Amount.ToString())
-                                            Html.td ""
-                                        | Transfer (fromAccountId, _) when fromAccountId = info.ActiveAccount.Id ->
-                                            Html.td (transaction.Amount.ToString())
-                                            Html.td ""
-                                        | Transfer (_, toAccountId) when toAccountId = info.ActiveAccount.Id ->
-                                            Html.td ""
-                                            Html.td (transaction.Amount.ToString())
-                                        | Transfer _ -> failwith "Not Implemented"
-                                    ]
-                                ]
-                        ]
+                        renderTransactions info dispatch
                     ]
                 ]
             ]
         ]
 
-let renderAccounts info dispatch =
-    Html.ul [
-        for account in info.Accounts do
-            Html.li [
-                prop.text account.Name
-                if account = info.ActiveAccount then
-                    prop.classes [ "rounded-md p-1 pl-5" ]
+let renderAccountList model dispatch =
+    Bulma.block [
+        Html.strong [
+            color.hasTextWhite
+            prop.text "Accounts"
+        ]
 
-                    prop.style [
-                        style.backgroundColor lightBackgroundColor
-                    ]
-                else
-                    prop.classes [
-                        "rounded-md p-1 pl-5"
-                        $"hover:bg-[{darkBackgroundColor}] hover:cursor-pointer"
+        match model with
+        | NoAccounts -> Html.p "Create account"
+        | AccountsLoaded _ -> Html.none
+        | ViewActiveAccount info ->
+            Html.ul [
+                for account in info.Accounts do
+                    Html.li [
+                        prop.text account.Name
+                        if account = info.ActiveAccount then
+                            prop.classes [ "rounded-md px-4 py-1" ]
+
+                            prop.style [
+                                style.backgroundColor lightBackgroundColor
+                            ]
+                        else
+                            prop.classes [
+                                "rounded-md px-4 py-1"
+                                $"hover:bg-[{darkBackgroundColor}] hover:cursor-pointer"
+                            ]
+
+                            prop.onClick (fun ev -> SelectActiveAccount account.Id |> dispatch)
                     ]
 
-                    prop.onClick (fun ev -> SelectActiveAccount account.Id |> dispatch)
-            ]
+                ]
     ]
 
 let view (model: Model) (dispatch: Msg -> unit) =
@@ -213,30 +228,18 @@ let view (model: Model) (dispatch: Msg -> unit) =
         prop.children [
             Bulma.column [
                 column.isNarrow
+                color.hasTextWhite
                 prop.style [
                     style.width (length.px 200)
+                    style.margin 10
                     style.backgroundColor backgroundColor
                 ]
                 prop.children [
-                    Bulma.column [
-                        color.hasTextWhite
-                        prop.children [
-                            Html.strong [
-                                color.hasTextWhite
-                                prop.text "Accounts"
-                            ]
-                            match model with
-                            | NoAccounts -> Html.p "Create account"
-                            | AccountsLoaded _ -> Html.none
-                            | ViewActiveAccount info -> renderAccounts info dispatch
-                        ]
-                    ]
+                    renderAccountList model dispatch
                 ]
             ]
             Bulma.column [
-                prop.children [
-                    viewActiveAccount model dispatch
-                ]
+                renderMainView model dispatch
             ]
         ]
     ]
