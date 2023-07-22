@@ -10,7 +10,8 @@ importAll "./css/tailwind.css"
 type ActiveAccountInfo =
     { Accounts: Account list
       ActiveAccount: Account
-      Transactions: Transaction list }
+      Transactions: Transaction list
+      ActiveTransaction: Transaction option }
 
     member this.getAccount accountId =
         this.Accounts
@@ -25,6 +26,7 @@ type Msg =
     | GotAccounts of Account list
     | SelectActiveAccount of AccountId
     | GotTransactions of AccountId * Transaction list
+    | SelectActiveTransaction of Transaction
 
 let budgetApi =
     Remoting.createApi ()
@@ -48,7 +50,7 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
     | _, SelectActiveAccount accountId ->
         let cmd = Cmd.OfAsync.perform budgetApi.getTransactions accountId GotTransactions
         model, cmd
-    | NoAccounts, GotTransactions _ -> failwith "Got transaction but there are no accounts"
+    | NoAccounts, GotTransactions _ -> failwith "Got transactions but there are no accounts"
     | AccountsLoaded accounts, GotTransactions (accountId, transactions)
     | ViewActiveAccount { Accounts = accounts }, GotTransactions (accountId, transactions) ->
         ViewActiveAccount
@@ -56,8 +58,13 @@ let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
               ActiveAccount =
                 accounts
                 |> Seq.find (fun acct -> acct.Id = accountId)
-              Transactions = transactions },
+              Transactions = transactions
+              ActiveTransaction = None },
         Cmd.none
+    | ViewActiveAccount info, SelectActiveTransaction transaction ->
+        ViewActiveAccount { info with ActiveTransaction = Some(transaction) }, Cmd.none
+    | _, SelectActiveTransaction transaction -> failwith "Cannot select active transaction"
+
 
 open Feliz
 open Feliz.Bulma
@@ -66,6 +73,7 @@ open System
 let backgroundColor = "#2C4461"
 let darkBackgroundColor = "#29374D"
 let lightBackgroundColor = "#4673A3"
+let activeTransactionColor = "#DBE8F6"
 
 let navBrand =
     Bulma.navbarBrand.div [
@@ -132,35 +140,43 @@ let viewActiveAccount model (dispatch: Msg -> unit) =
                         Html.tbody [
                             for transaction in info.Transactions do
                                 Html.tr [
-                                    Html.td (formatDate transaction.Date)
-                                    match transaction.Type with
-                                    | Inflow (_, payee)
-                                    | Outflow (_, payee) -> EditableTd payee dispatch
-                                    | Transfer (fromAccountId, toAccountId) ->
-                                        if info.ActiveAccount.Id = fromAccountId then
-                                            let toAccount = info.getAccount toAccountId
-                                            Html.td $"Transfer to {toAccount.Name}"
-                                        else
-                                            let fromAccount = info.getAccount fromAccountId
-                                            Html.td $"Transfer from {fromAccount.Name}"
+                                    prop.onClick (fun _ -> SelectActiveTransaction transaction |> dispatch)
+                                    // Highlight active transaction
+                                    if Some transaction = info.ActiveTransaction then
+                                        prop.classes [
+                                            $"bg-[{activeTransactionColor}]"
+                                        ]
+                                    prop.children [
+                                        Html.td (formatDate transaction.Date)
+                                        match transaction.Type with
+                                        | Inflow (_, payee)
+                                        | Outflow (_, payee) -> EditableTd payee dispatch
+                                        | Transfer (fromAccountId, toAccountId) ->
+                                            if info.ActiveAccount.Id = fromAccountId then
+                                                let toAccount = info.getAccount toAccountId
+                                                Html.td $"Transfer to {toAccount.Name}"
+                                            else
+                                                let fromAccount = info.getAccount fromAccountId
+                                                Html.td $"Transfer from {fromAccount.Name}"
 
-                                    Html.td "category"
-                                    EditableTd transaction.Comment dispatch
+                                        Html.td "category"
+                                        EditableTd transaction.Comment dispatch
 
-                                    match transaction.Type with
-                                    | Inflow _ ->
-                                        Html.td ""
-                                        Html.td (transaction.Amount.ToString())
-                                    | Outflow _ ->
-                                        Html.td (transaction.Amount.ToString())
-                                        Html.td ""
-                                    | Transfer (fromAccountId, _) when fromAccountId = info.ActiveAccount.Id ->
-                                        Html.td (transaction.Amount.ToString())
-                                        Html.td ""
-                                    | Transfer (_, toAccountId) when toAccountId = info.ActiveAccount.Id ->
-                                        Html.td ""
-                                        Html.td (transaction.Amount.ToString())
-                                    | Transfer _ -> failwith "Not Implemented"
+                                        match transaction.Type with
+                                        | Inflow _ ->
+                                            Html.td ""
+                                            Html.td (transaction.Amount.ToString())
+                                        | Outflow _ ->
+                                            Html.td (transaction.Amount.ToString())
+                                            Html.td ""
+                                        | Transfer (fromAccountId, _) when fromAccountId = info.ActiveAccount.Id ->
+                                            Html.td (transaction.Amount.ToString())
+                                            Html.td ""
+                                        | Transfer (_, toAccountId) when toAccountId = info.ActiveAccount.Id ->
+                                            Html.td ""
+                                            Html.td (transaction.Amount.ToString())
+                                        | Transfer _ -> failwith "Not Implemented"
+                                    ]
                                 ]
                         ]
                     ]
