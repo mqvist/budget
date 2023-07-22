@@ -84,6 +84,29 @@ let navBrand =
 let formatDate (date: DateOnly) =
     $"%02d{date.Day}.%02d{date.Month}.{date.Year}"
 
+[<ReactComponent>]
+let EditableTd (value: string) dispatch =
+    let (editing, enableEditing) = React.useState (false)
+    let (value, setValue) = React.useState (value)
+
+    Html.td [
+        if not editing then
+            prop.onClick (fun _ -> enableEditing true)
+            prop.text value
+        else
+            prop.children [
+                Html.input [
+                    // Bulma.input.isFocused
+                    prop.autoFocus true
+                    prop.onChange (fun v -> setValue v)
+                    prop.onBlur (fun _ ->
+                        // dispatch SetTransactionPayee value
+                        enableEditing false)
+                    prop.value value
+                ]
+            ]
+    ]
+
 let viewActiveAccount model (dispatch: Msg -> unit) =
     match model with
     | NoAccounts -> Bulma.title "No accounts"
@@ -112,7 +135,7 @@ let viewActiveAccount model (dispatch: Msg -> unit) =
                                     Html.td (formatDate transaction.Date)
                                     match transaction.Type with
                                     | Inflow (_, payee)
-                                    | Outflow (_, payee) -> Html.td payee
+                                    | Outflow (_, payee) -> EditableTd payee dispatch
                                     | Transfer (fromAccountId, toAccountId) ->
                                         if info.ActiveAccount.Id = fromAccountId then
                                             let toAccount = info.getAccount toAccountId
@@ -122,7 +145,7 @@ let viewActiveAccount model (dispatch: Msg -> unit) =
                                             Html.td $"Transfer from {fromAccount.Name}"
 
                                     Html.td "category"
-                                    Html.td transaction.Comment
+                                    EditableTd transaction.Comment dispatch
 
                                     match transaction.Type with
                                     | Inflow _ ->
