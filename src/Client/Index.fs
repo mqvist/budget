@@ -7,18 +7,23 @@ open Shared
 
 importAll "./css/tailwind.css"
 
-type Model =
+type ActiveAccountInfo =
     { Accounts: Account list
-      ActiveAccount: Account option
+      ActiveAccount: Account
       Transactions: Transaction list }
 
     member this.getAccount accountId =
         this.Accounts
         |> List.find (fun acct -> acct.Id = accountId)
 
+type Model =
+    | NoAccounts
+    | AccountsLoaded of Account list
+    | ViewActiveAccount of ActiveAccountInfo
+
 type Msg =
     | GotAccounts of Account list
-    | ChooseAccount of AccountId
+    | SelectActiveAccount of AccountId
     | GotTransactions of AccountId * Transaction list
 
 let budgetApi =
@@ -27,32 +32,31 @@ let budgetApi =
     |> Remoting.buildProxy<IBudgetApi>
 
 let init () : Model * Cmd<Msg> =
-    let model =
-        { Accounts = []
-          ActiveAccount = None
-          Transactions = [] }
+    let model = NoAccounts
 
     let cmd = Cmd.OfAsync.perform budgetApi.getAccounts () GotAccounts
     model, cmd
 
 let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
-    match msg with
-    | GotAccounts accounts when accounts.IsEmpty -> { model with Accounts = accounts }, Cmd.none
-    | GotAccounts accounts ->
+    match model, msg with
+    | _, GotAccounts accounts when accounts.IsEmpty -> NoAccounts, Cmd.none
+    | _, GotAccounts accounts ->
         let accountId = accounts.Head.Id
         let cmd = Cmd.OfAsync.perform budgetApi.getTransactions accountId GotTransactions
 
-        { model with Accounts = accounts }, cmd
-    | ChooseAccount accountId ->
+        AccountsLoaded accounts, cmd
+    | _, SelectActiveAccount accountId ->
         let cmd = Cmd.OfAsync.perform budgetApi.getTransactions accountId GotTransactions
         model, cmd
-    | GotTransactions (accountId, transactions) ->
-        { model with
-            ActiveAccount =
-                model.Accounts
+    | NoAccounts, GotTransactions _ -> failwith "Got transaction but there are no accounts"
+    | AccountsLoaded accounts, GotTransactions (accountId, transactions)
+    | ViewActiveAccount { Accounts = accounts }, GotTransactions (accountId, transactions) ->
+        ViewActiveAccount
+            { Accounts = accounts
+              ActiveAccount =
+                accounts
                 |> Seq.find (fun acct -> acct.Id = accountId)
-                |> Some
-            Transactions = transactions },
+              Transactions = transactions },
         Cmd.none
 
 open Feliz
@@ -80,12 +84,13 @@ let navBrand =
 let formatDate (date: DateOnly) =
     $"%02d{date.Day}.%02d{date.Month}.{date.Year}"
 
-let viewActiveAccount (model: Model) (dispatch: Msg -> unit) =
-    match model.ActiveAccount with
-    | None -> Bulma.title "No active account"
-    | Some account ->
+let viewActiveAccount model (dispatch: Msg -> unit) =
+    match model with
+    | NoAccounts -> Bulma.title "No accounts"
+    | AccountsLoaded _ -> Html.none
+    | ViewActiveAccount info ->
         Bulma.block [
-            Bulma.title account.Name
+            Bulma.title info.ActiveAccount.Name
 
             Bulma.tableContainer [
                 Bulma.table [
@@ -102,18 +107,18 @@ let viewActiveAccount (model: Model) (dispatch: Msg -> unit) =
                             ]
                         ]
                         Html.tbody [
-                            for transaction in model.Transactions do
+                            for transaction in info.Transactions do
                                 Html.tr [
                                     Html.td (formatDate transaction.Date)
                                     match transaction.Type with
                                     | Inflow (_, payee)
                                     | Outflow (_, payee) -> Html.td payee
                                     | Transfer (fromAccountId, toAccountId) ->
-                                        if account.Id = fromAccountId then
-                                            let toAccount = model.getAccount toAccountId
+                                        if info.ActiveAccount.Id = fromAccountId then
+                                            let toAccount = info.getAccount toAccountId
                                             Html.td $"Transfer to {toAccount.Name}"
                                         else
-                                            let fromAccount = model.getAccount fromAccountId
+                                            let fromAccount = info.getAccount fromAccountId
                                             Html.td $"Transfer from {fromAccount.Name}"
 
                                     Html.td "category"
@@ -126,57 +131,26 @@ let viewActiveAccount (model: Model) (dispatch: Msg -> unit) =
                                     | Outflow _ ->
                                         Html.td (transaction.Amount.ToString())
                                         Html.td ""
-                                    | Transfer (fromAccountId, toAccountId) when fromAccountId = account.Id ->
+                                    | Transfer (fromAccountId, _) when fromAccountId = info.ActiveAccount.Id ->
                                         Html.td (transaction.Amount.ToString())
                                         Html.td ""
-                                    | Transfer (fromAccountId, toAccountId) when toAccountId = account.Id ->
+                                    | Transfer (_, toAccountId) when toAccountId = info.ActiveAccount.Id ->
                                         Html.td ""
                                         Html.td (transaction.Amount.ToString())
-                                    | Transfer (fromAccountId, toAccountId) -> failwith "Not Implemented"
+                                    | Transfer _ -> failwith "Not Implemented"
                                 ]
                         ]
                     ]
                 ]
             ]
         ]
-// Bulma.box [
-//     Bulma.content [
-//         Html.ol [
-//             for todo in model.Todos do
-//                 Html.li [ prop.text todo.Description ]
-//         ]
-//     ]
-//     Bulma.field.div [
-//         field.isGrouped
-//         prop.children [
-//             Bulma.control.p [
-//                 control.isExpanded
-//                 prop.children [
-//                     Bulma.input.text [
-//                         prop.value model.Input
-//                         prop.placeholder "What needs to be done?"
-//                         prop.onChange (fun x -> SetInput x |> dispatch)
-//                     ]
-//                 ]
-//             ]
-//             Bulma.control.p [
-//                 Bulma.button.a [
-//                     color.isPrimary
-//                     prop.disabled (Todo.isValid model.Input |> not)
-//                     prop.onClick (fun _ -> dispatch AddTodo)
-//                     prop.text "Add"
-//                 ]
-//             ]
-//         ]
-//     ]
-// ]
 
-let renderAccounts model dispatch =
+let renderAccounts info dispatch =
     Html.ul [
-        for account in model.Accounts do
+        for account in info.Accounts do
             Html.li [
                 prop.text account.Name
-                if Some(account) = model.ActiveAccount then
+                if account = info.ActiveAccount then
                     prop.classes [ "rounded-md p-1 pl-5" ]
 
                     prop.style [
@@ -188,7 +162,7 @@ let renderAccounts model dispatch =
                         $"hover:bg-[{darkBackgroundColor}] hover:cursor-pointer"
                     ]
 
-                    prop.onClick (fun ev -> ChooseAccount account.Id |> dispatch)
+                    prop.onClick (fun ev -> SelectActiveAccount account.Id |> dispatch)
             ]
     ]
 
@@ -212,7 +186,10 @@ let view (model: Model) (dispatch: Msg -> unit) =
                                 color.hasTextWhite
                                 prop.text "Accounts"
                             ]
-                            renderAccounts model dispatch
+                            match model with
+                            | NoAccounts -> Html.p "Create account"
+                            | AccountsLoaded _ -> Html.none
+                            | ViewActiveAccount info -> renderAccounts info dispatch
                         ]
                     ]
                 ]
