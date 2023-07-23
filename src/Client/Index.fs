@@ -74,11 +74,6 @@ open Feliz
 open Feliz.Bulma
 open System
 
-let backgroundColor = "#2C4461"
-let darkBackgroundColor = "#29374D"
-let lightBackgroundColor = "#4673A3"
-let activeTransactionColor = "#DBE8F6"
-
 let navBrand =
     Bulma.navbarBrand.div [
         Bulma.navbarItem.a [
@@ -126,9 +121,7 @@ let renderTransactions info dispatch =
                 prop.onClick (fun _ -> SelectActiveTransaction transaction |> dispatch)
                 // Highlight active transaction
                 if Some transaction = info.ActiveTransaction then
-                    prop.classes [
-                        $"bg-[{activeTransactionColor}]"
-                    ]
+                    prop.classes [ "bg-blue-100" ]
                 prop.children [
                     Html.td (formatDate transaction.Date)
                     match transaction.Type with
@@ -207,15 +200,14 @@ let renderAccountList model dispatch =
                     Html.li [
                         prop.text account.Name
                         if account = info.ActiveAccount then
-                            prop.classes [ "rounded-md px-4 py-1" ]
-
-                            prop.style [
-                                style.backgroundColor lightBackgroundColor
+                            prop.classes [
+                                "rounded-md px-4 py-1 bg-sky-600"
                             ]
+
                         else
                             prop.classes [
                                 "rounded-md px-4 py-1"
-                                $"hover:bg-[{darkBackgroundColor}] hover:cursor-pointer"
+                                "hover:bg-sky-900 hover:cursor-pointer"
                             ]
 
                             prop.onClick (fun ev -> SelectActiveAccount account.Id |> dispatch)
@@ -233,11 +225,7 @@ let view (model: Model) (dispatch: Msg -> unit) =
             Bulma.column [
                 column.isNarrow
                 color.hasTextWhite
-                prop.style [
-                    style.width (length.px 200)
-                    style.margin 10
-                    style.backgroundColor backgroundColor
-                ]
+                prop.classes [ "w-52 m-2.5 bg-sky-800" ]
                 prop.children [
                     renderAccountList model dispatch
                 ]
