@@ -53,7 +53,9 @@ module Storage =
 
 let budgetApi =
     { getAccounts = fun () -> async { return Storage.accounts |> List.ofSeq }
-      getTransactions = fun accountId -> async { return (accountId, Storage.getTransactions accountId |> List.ofSeq) } }
+      getTransactions =
+        fun accountId ->
+            async { return (accountId, Storage.getTransactions accountId |> List.ofSeq) } }
 
 let webApp =
     Remoting.createApi ()
