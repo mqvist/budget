@@ -35,7 +35,6 @@ let budgetApi =
 
 let init () : Model * Cmd<Msg> =
     let model = NoAccounts
-
     let cmd = Cmd.OfAsync.perform budgetApi.getAccounts () GotAccounts
     model, cmd
 
@@ -156,14 +155,13 @@ let renderTransactions info dispatch =
             ]
     ]
 
-let renderMainView model (dispatch: Msg -> unit) =
+let renderMainView model dispatch =
     match model with
     | NoAccounts -> Bulma.title "No accounts"
     | AccountsLoaded _ -> Html.none
     | ViewActiveAccount info ->
         Bulma.block [
             Bulma.title info.ActiveAccount.Name
-
             Bulma.tableContainer [
                 Bulma.table [
                     table.isFullWidth
@@ -216,7 +214,7 @@ let renderAccountList model dispatch =
                 ]
     ]
 
-let view (model: Model) (dispatch: Msg -> unit) =
+let view model dispatch =
     Bulma.columns [
         prop.style [
             style.height (length.vh 100)
