@@ -39,31 +39,35 @@ let init () : Model * Cmd<Msg> =
     let cmd = Cmd.OfAsync.perform budgetApi.getAccounts () GotAccounts
     model, cmd
 
-let update (msg: Msg) (model: Model) : Model * Cmd<Msg> =
-    match model, msg with
-    | _, GotAccounts accounts when accounts.IsEmpty -> NoAccounts, Cmd.none
-    | _, GotAccounts accounts ->
+let update msg model : Model * Cmd<Msg> =
+    match msg with
+    | GotAccounts accounts when accounts.IsEmpty -> NoAccounts, Cmd.none
+    | GotAccounts accounts ->
         let accountId = accounts.Head.Id
         let cmd = Cmd.OfAsync.perform budgetApi.getTransactions accountId GotTransactions
 
         AccountsLoaded accounts, cmd
-    | _, SelectActiveAccount accountId ->
+    | SelectActiveAccount accountId ->
         let cmd = Cmd.OfAsync.perform budgetApi.getTransactions accountId GotTransactions
         model, cmd
-    | NoAccounts, GotTransactions _ -> failwith "Got transactions but there are no accounts"
-    | AccountsLoaded accounts, GotTransactions (accountId, transactions)
-    | ViewActiveAccount { Accounts = accounts }, GotTransactions (accountId, transactions) ->
-        ViewActiveAccount
-            { Accounts = accounts
-              ActiveAccount =
-                accounts
-                |> Seq.find (fun acct -> acct.Id = accountId)
-              Transactions = transactions
-              ActiveTransaction = None },
-        Cmd.none
-    | ViewActiveAccount info, SelectActiveTransaction transaction ->
-        ViewActiveAccount { info with ActiveTransaction = Some(transaction) }, Cmd.none
-    | _, SelectActiveTransaction transaction -> failwith "Cannot select active transaction"
+    | GotTransactions (accountId, transactions) ->
+        match model with
+        | NoAccounts -> failwith "Got transactions but there are no accounts"
+        | AccountsLoaded accounts
+        | ViewActiveAccount { Accounts = accounts } ->
+            ViewActiveAccount
+                { Accounts = accounts
+                  ActiveAccount =
+                    accounts
+                    |> Seq.find (fun acct -> acct.Id = accountId)
+                  Transactions = transactions
+                  ActiveTransaction = None },
+            Cmd.none
+    | SelectActiveTransaction transaction ->
+        match model with
+        | ViewActiveAccount info ->
+            ViewActiveAccount { info with ActiveTransaction = Some(transaction) }, Cmd.none
+        | _ -> failwith "Cannot select active transaction"
 
 
 open Feliz
