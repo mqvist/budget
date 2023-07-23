@@ -5,7 +5,7 @@ open Fable.Remoting.Client
 open Fable.Core.JsInterop
 open Shared
 
-importAll "./css/tailwind.css"
+importAll "./css/style.css"
 
 type ActiveAccountInfo =
     { Accounts: Account list
