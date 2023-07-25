@@ -156,62 +156,69 @@ let renderTransactions info dispatch =
     ]
 
 let renderMainView model dispatch =
-    match model with
-    | NoAccounts -> Bulma.title "No accounts"
-    | AccountsLoaded _ -> Html.none
-    | ViewActiveAccount info ->
-        Bulma.block [
-            Bulma.title info.ActiveAccount.Name
-            Bulma.tableContainer [
-                Bulma.table [
-                    table.isFullWidth
-                    prop.children [
-                        Html.thead [
-                            Html.tr [
-                                Html.th "Date"
-                                Html.th "Payee"
-                                Html.th "Category"
-                                Html.th "Comment"
-                                Html.th "Outflow"
-                                Html.th "Inflow"
+    Bulma.column [
+        match model with
+        | NoAccounts -> Bulma.title "No accounts"
+        | AccountsLoaded _ -> Html.none
+        | ViewActiveAccount info ->
+            Bulma.block [
+                Bulma.title info.ActiveAccount.Name
+                Bulma.tableContainer [
+                    Bulma.table [
+                        table.isFullWidth
+                        prop.children [
+                            Html.thead [
+                                Html.tr [
+                                    Html.th "Date"
+                                    Html.th "Payee"
+                                    Html.th "Category"
+                                    Html.th "Comment"
+                                    Html.th "Outflow"
+                                    Html.th "Inflow"
+                                ]
                             ]
+                            renderTransactions info dispatch
                         ]
-                        renderTransactions info dispatch
                     ]
                 ]
             ]
-        ]
+    ]
 
 let renderAccountList model dispatch =
-    Bulma.block [
-        Html.strong [
-            color.hasTextWhite
-            prop.text "Accounts"
-        ]
+    Bulma.column [
+        column.isNarrow
+        color.hasTextWhite
+        prop.classes [ "w-52 m-2.5 bg-sky-800" ]
+        prop.children [
+            Html.strong [
+                color.hasTextWhite
+                prop.text "Accounts"
+            ]
 
-        match model with
-        | NoAccounts -> Html.p "Create account"
-        | AccountsLoaded _ -> Html.none
-        | ViewActiveAccount info ->
-            Html.ul [
-                for account in info.Accounts do
-                    Html.li [
-                        prop.text account.Name
-                        if account = info.ActiveAccount then
-                            prop.classes [
-                                "rounded-md px-4 py-1 bg-sky-600"
-                            ]
+            match model with
+            | NoAccounts
+            | AccountsLoaded _ -> Html.none
+            | ViewActiveAccount info ->
+                Html.ul [
+                    for account in info.Accounts do
+                        Html.li [
+                            prop.text account.Name
+                            if account = info.ActiveAccount then
+                                prop.classes [
+                                    "rounded-md px-4 py-1 bg-sky-600"
+                                ]
 
-                        else
-                            prop.classes [
-                                "rounded-md px-4 py-1"
-                                "hover:bg-sky-900 hover:cursor-pointer"
-                            ]
+                            else
+                                prop.classes [
+                                    "rounded-md px-4 py-1"
+                                    "hover:bg-sky-900 hover:cursor-pointer"
+                                ]
 
-                            prop.onClick (fun ev -> SelectActiveAccount account.Id |> dispatch)
+                                prop.onClick (fun ev -> SelectActiveAccount account.Id |> dispatch)
+                        ]
+
                     ]
-
-                ]
+        ]
     ]
 
 let view model dispatch =
@@ -220,16 +227,7 @@ let view model dispatch =
             style.height (length.vh 100)
         ]
         prop.children [
-            Bulma.column [
-                column.isNarrow
-                color.hasTextWhite
-                prop.classes [ "w-52 m-2.5 bg-sky-800" ]
-                prop.children [
-                    renderAccountList model dispatch
-                ]
-            ]
-            Bulma.column [
-                renderMainView model dispatch
-            ]
+            renderAccountList model dispatch
+            renderMainView model dispatch
         ]
     ]
