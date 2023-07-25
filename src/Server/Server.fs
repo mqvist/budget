@@ -35,17 +35,17 @@ module Storage =
         let account2 = Account.create "Dummy"
         addAccount (account2)
 
-        Transaction.createOutflow account1.Id "Mika" (Money 100) "test"
+        Transaction.createOutflow account1.Id "Mika" (Money 100m) "test"
         |> addTransaction
         |> Result.mapError (fun error -> failwith error)
         |> ignore
 
-        Transaction.createInflow account1.Id "EB" (Money 100) "test"
+        Transaction.createInflow account1.Id "EB" (Money 100m) "test"
         |> addTransaction
         |> Result.mapError (fun error -> failwith error)
         |> ignore
 
-        Transaction.createTransfer account1.Id account2.Id (Money 50) "Transfer"
+        Transaction.createTransfer account1.Id account2.Id (Money 50m) "Transfer"
         |> addTransaction
         |> Result.mapError (fun error -> failwith error)
         |> ignore

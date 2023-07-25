@@ -2,7 +2,10 @@ namespace Shared
 
 open System
 
-type Money = decimal
+type Money =
+    | Money of decimal
+    override this.ToString() = $"%.2f{this |> fun (Money m) -> m}€"
+
 type AccountId = Guid
 type Account = { Id: AccountId; Name: string }
 
@@ -23,7 +26,7 @@ module Account =
 
 module Transaction =
     let isValid t =
-        (t.Amount = Money 0
+        (t.Amount = Money 0m
          || String.IsNullOrWhiteSpace t.Comment)
         |> not
 
