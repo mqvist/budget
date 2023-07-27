@@ -7,11 +7,16 @@ open Shared
 
 importAll "./css/style.css"
 
+type ActiveTransactionState =
+    | None
+    | Selected of Transaction
+    | Editing of Transaction
+
 type ActiveAccountInfo =
     { Accounts: Account list
       ActiveAccount: Account
       Transactions: Transaction list
-      ActiveTransaction: Transaction option }
+      ActiveTransaction: ActiveTransactionState }
 
     member this.getAccount accountId =
         this.Accounts
@@ -27,6 +32,8 @@ type Msg =
     | SelectActiveAccount of AccountId
     | GotTransactions of AccountId * Transaction list
     | SelectActiveTransaction of Transaction
+    | StartTransactionEditing of Transaction
+    | CancelEditing of Transaction
 
 let budgetApi =
     Remoting.createApi ()
@@ -51,7 +58,7 @@ let update msg model : Model * Cmd<Msg> =
         model, cmd
     | GotTransactions (accountId, transactions) ->
         match model with
-        | NoAccounts -> failwith "Got transactions but there are no accounts"
+        | NoAccounts -> failwith "Got transactions but have no accounts"
         | AccountsLoaded accounts
         | ViewActiveAccount { Accounts = accounts } ->
             ViewActiveAccount
@@ -65,27 +72,23 @@ let update msg model : Model * Cmd<Msg> =
     | SelectActiveTransaction transaction ->
         match model with
         | ViewActiveAccount info ->
-            ViewActiveAccount { info with ActiveTransaction = Some(transaction) }, Cmd.none
-        | _ -> failwith "Cannot select active transaction"
+            ViewActiveAccount { info with ActiveTransaction = Selected transaction }, Cmd.none
+        | _ -> failwith "Invalid state"
+    | StartTransactionEditing transaction ->
+        match model with
+        | ViewActiveAccount info ->
+            ViewActiveAccount { info with ActiveTransaction = Editing transaction }, Cmd.none
+        | _ -> failwith "Invalid state"
+    | CancelEditing transaction ->
+        match model with
+        | ViewActiveAccount info ->
+            ViewActiveAccount { info with ActiveTransaction = Selected transaction }, Cmd.none
+        | _ -> failwith "Invalid state"
 
 
 open Feliz
 open Feliz.Bulma
 open System
-
-let navBrand =
-    Bulma.navbarBrand.div [
-        Bulma.navbarItem.a [
-            prop.href "https://safe-stack.github.io/"
-            navbarItem.isActive
-            prop.children [
-                Html.img [
-                    prop.src "/favicon.png"
-                    prop.alt "Logo"
-                ]
-            ]
-        ]
-    ]
 
 let formatDate (date: DateOnly) =
     $"%02d{date.Day}.%02d{date.Month}.{date.Year}"
@@ -113,46 +116,116 @@ let EditableTd (value: string) dispatch =
             ]
     ]
 
+let renderTransaction info transaction =
+    [ Html.td (formatDate transaction.Date)
+      match transaction.Type with
+      | Inflow (_, payee)
+      | Outflow (_, payee) -> Html.td payee
+      | Transfer (fromAccountId, toAccountId) ->
+          if info.ActiveAccount.Id = fromAccountId then
+              let toAccount = info.getAccount toAccountId
+              Html.td $"Transfer to {toAccount.Name}"
+          else
+              let fromAccount = info.getAccount fromAccountId
+              Html.td $"Transfer from {fromAccount.Name}"
+
+      Html.td "category"
+      Html.td transaction.Comment
+
+      match transaction.Type with
+      | Inflow _ ->
+          Html.td ""
+          Html.td (transaction.Amount.ToString())
+      | Outflow _ ->
+          Html.td (transaction.Amount.ToString())
+          Html.td ""
+      | Transfer (fromAccountId, _) when fromAccountId = info.ActiveAccount.Id ->
+          Html.td (transaction.Amount.ToString())
+          Html.td ""
+      | Transfer (_, toAccountId) when toAccountId = info.ActiveAccount.Id ->
+          Html.td ""
+          Html.td (transaction.Amount.ToString())
+      | Transfer _ -> failwith "Not Implemented" ]
+
+let renderTransactionEditor info transaction dispatch =
+    Html.td [
+        // Use relative positioning to anchor the absolute buttons
+        prop.classes [ "relative"; "h-8" ]
+        prop.colSpan 100
+        prop.children [
+            Bulma.button.button [
+                button.isSmall
+                color.isPrimary
+                prop.classes [
+                    "absolute right-16 top-1"
+                    "h-6 w-20"
+                ]
+                prop.text "Save"
+            ]
+
+            Bulma.button.button [
+                button.isSmall
+                button.isOutlined
+                color.isInfo
+
+                prop.classes [
+                    "absolute right-40 top-1"
+                    "h-6 w-20"
+                ]
+                prop.text "Cancel"
+                prop.onClick (fun ev ->
+                    // ev.stopPropagation ()
+                    dispatch (CancelEditing transaction))
+            ]
+        ]
+    ]
+
 let renderTransactions info dispatch =
     Html.tbody [
-        for transaction in info.Transactions do
-            Html.tr [
-                prop.onClick (fun _ -> SelectActiveTransaction transaction |> dispatch)
-                // Highlight active transaction
-                if Some transaction = info.ActiveTransaction then
-                    prop.classes [ "bg-blue-100" ]
-                prop.children [
-                    Html.td (formatDate transaction.Date)
-                    match transaction.Type with
-                    | Inflow (_, payee)
-                    | Outflow (_, payee) -> EditableTd payee dispatch
-                    | Transfer (fromAccountId, toAccountId) ->
-                        if info.ActiveAccount.Id = fromAccountId then
-                            let toAccount = info.getAccount toAccountId
-                            Html.td $"Transfer to {toAccount.Name}"
-                        else
-                            let fromAccount = info.getAccount fromAccountId
-                            Html.td $"Transfer from {fromAccount.Name}"
+        prop.children [
+            for transaction in info.Transactions do
+                match info.ActiveTransaction with
+                | Selected t when transaction = t ->
+                    Html.tr [
+                        prop.classes [
+                            "leading-none bg-blue-100"
+                        ]
 
-                    Html.td "category"
-                    EditableTd transaction.Comment dispatch
+                        prop.onMouseUp (fun ev ->
+                            ev.stopPropagation ()
+                            dispatch (StartTransactionEditing transaction))
 
-                    match transaction.Type with
-                    | Inflow _ ->
-                        Html.td ""
-                        Html.td (transaction.Amount.ToString())
-                    | Outflow _ ->
-                        Html.td (transaction.Amount.ToString())
-                        Html.td ""
-                    | Transfer (fromAccountId, _) when fromAccountId = info.ActiveAccount.Id ->
-                        Html.td (transaction.Amount.ToString())
-                        Html.td ""
-                    | Transfer (_, toAccountId) when toAccountId = info.ActiveAccount.Id ->
-                        Html.td ""
-                        Html.td (transaction.Amount.ToString())
-                    | Transfer _ -> failwith "Not Implemented"
-                ]
-            ]
+                        prop.children (renderTransaction info transaction)
+                    ]
+
+                | Editing t when transaction = t ->
+                    Html.tr [
+                        prop.classes [
+                            "leading-none"
+                            "bg-blue-100"
+                        ]
+                        prop.children (renderTransaction info transaction)
+                    ]
+
+                    Html.tr [
+                        prop.classes [
+                            "leading-none"
+                            "bg-blue-100"
+                        ]
+                        prop.children [
+                            renderTransactionEditor info transaction dispatch
+                        ]
+                    ]
+
+                | _ ->
+                    Html.tr [
+                        prop.className "leading-none"
+                        prop.onMouseUp (fun ev ->
+                            ev.stopPropagation ()
+                            dispatch (SelectActiveTransaction transaction))
+                        prop.children (renderTransaction info transaction)
+                    ]
+        ]
     ]
 
 let renderMainView model dispatch =
