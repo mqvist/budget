@@ -185,7 +185,7 @@ let renderTransactions info dispatch =
         prop.children [
             for transaction in info.Transactions do
                 match info.ActiveTransaction with
-                | Selected t when transaction = t ->
+                | Selected t when transaction.Id = t.Id ->
                     Html.tr [
                         prop.classes [
                             "leading-none bg-blue-100"
@@ -198,7 +198,7 @@ let renderTransactions info dispatch =
                         prop.children (renderTransaction info transaction)
                     ]
 
-                | Editing t when transaction = t ->
+                | Editing t when transaction.Id = t.Id ->
                     Html.tr [
                         prop.classes [
                             "leading-none"
@@ -276,7 +276,7 @@ let renderAccountList model dispatch =
                     for account in info.Accounts do
                         Html.li [
                             prop.text account.Name
-                            if account = info.ActiveAccount then
+                            if account.Id = info.ActiveAccount.Id then
                                 prop.classes [
                                     "rounded-md px-4 py-1 bg-sky-600"
                                 ]

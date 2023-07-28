@@ -6,23 +6,29 @@ type Money =
     | Money of decimal
     override this.ToString() = $"%.2f{this |> fun (Money m) -> m}€"
 
-type AccountId = Guid
+type AccountId = AccountId of Guid
+type TransactionId = TransactionId of Guid
+
+[<NoEquality; NoComparison>]
 type Account = { Id: AccountId; Name: string }
 
 type TransactionType =
-    | Outflow of fromAccountId: Guid * payee: string
-    | Inflow of toAccountId: Guid * payee: string
-    | Transfer of fromAccountId: Guid * toAccountId: Guid
+    | Outflow of fromAccountId: AccountId * payee: string
+    | Inflow of toAccountId: AccountId * payee: string
+    | Transfer of fromAccountId: AccountId * toAccountId: AccountId
 
+[<NoEquality; NoComparison>]
 type Transaction =
-    { Id: Guid
+    { Id: TransactionId
       Date: DateOnly
       Amount: Money
       Type: TransactionType
       Comment: string }
 
 module Account =
-    let create (name: string) = { Id = Guid.NewGuid(); Name = name }
+    let create (name: string) =
+        { Id = AccountId(Guid.NewGuid())
+          Name = name }
 
 module Transaction =
     let isValid t =
@@ -31,21 +37,21 @@ module Transaction =
         |> not
 
     let createOutflow fromAccountId payee amount comment =
-        { Id = Guid.NewGuid()
+        { Id = TransactionId(Guid.NewGuid())
           Date = DateOnly.FromDateTime(DateTime.Now)
           Amount = amount
           Type = Outflow(fromAccountId, payee)
           Comment = comment }
 
     let createInflow toAccountId payee amount comment =
-        { Id = Guid.NewGuid()
+        { Id = TransactionId(Guid.NewGuid())
           Date = DateOnly.FromDateTime(DateTime.Now)
           Amount = amount
           Type = Inflow(toAccountId, payee)
           Comment = comment }
 
     let createTransfer fromAccountId toAccountId amount comment =
-        { Id = Guid.NewGuid()
+        { Id = TransactionId(Guid.NewGuid())
           Date = DateOnly.FromDateTime(DateTime.Now)
           Amount = amount
           Type = Transfer(fromAccountId, toAccountId)
