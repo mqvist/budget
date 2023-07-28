@@ -20,7 +20,7 @@ type TransactionType =
 [<NoEquality; NoComparison>]
 type Transaction =
     { Id: TransactionId
-      Date: DateOnly
+      Date: DateTime
       Amount: Money
       Type: TransactionType
       Comment: string }
@@ -31,28 +31,25 @@ module Account =
           Name = name }
 
 module Transaction =
-    let isValid t =
-        (t.Amount = Money 0m
-         || String.IsNullOrWhiteSpace t.Comment)
-        |> not
+    let isValid t = (t.Amount = Money 0m) |> not
 
     let createOutflow fromAccountId payee amount comment =
         { Id = TransactionId(Guid.NewGuid())
-          Date = DateOnly.FromDateTime(DateTime.Now)
+          Date = DateTime.Today
           Amount = amount
           Type = Outflow(fromAccountId, payee)
           Comment = comment }
 
     let createInflow toAccountId payee amount comment =
         { Id = TransactionId(Guid.NewGuid())
-          Date = DateOnly.FromDateTime(DateTime.Now)
+          Date = DateTime.Today
           Amount = amount
           Type = Inflow(toAccountId, payee)
           Comment = comment }
 
     let createTransfer fromAccountId toAccountId amount comment =
         { Id = TransactionId(Guid.NewGuid())
-          Date = DateOnly.FromDateTime(DateTime.Now)
+          Date = DateTime.Today
           Amount = amount
           Type = Transfer(fromAccountId, toAccountId)
           Comment = comment }

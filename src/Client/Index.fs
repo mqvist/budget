@@ -75,7 +75,19 @@ let update msg model : Model * Cmd<Msg> =
                     ActiveAccount =
                         info.Accounts
                         |> Seq.find (fun acct -> acct.Id = accountId)
-                    Transactions = transactions },
+                    Transactions = transactions
+                    ActiveTransaction =
+                        match info.ActiveTransaction with
+                        | None -> None
+                        | Selected transaction
+                        | Editing transaction ->
+                            transactions
+                            |> Seq.tryFind (fun t -> t.Id = transaction.Id)
+                            |> (fun (o: Transaction option) ->
+                                if o.IsSome then
+                                    (Selected o.Value)
+                                else
+                                    None) },
             Cmd.none
 
     | SelectActiveTransaction transaction ->
@@ -124,7 +136,8 @@ open Feliz
 open Feliz.Bulma
 open System
 
-let formatDate (date: DateOnly) =
+
+let formatDate (date: DateTime) =
     $"%02d{date.Day}.%02d{date.Month}.{date.Year}"
 
 [<ReactComponent>]
@@ -190,10 +203,30 @@ let renderTransactionEditor info transaction dispatch =
             if event.charCode = 13.0 then
                 dispatch FinishEditing)
 
-    [ Html.td (formatDate transaction.Date)
+    [ Html.td [
+          prop.classes [ "py-0 px-0 m-0 w-40" ]
+          prop.children [
+              DateTimePicker.dateTimePicker [
+                  dateTimePicker.dateOnly true
+                  dateTimePicker.dateFormat "dd.MM.yyyy"
+                  dateTimePicker.defaultValue transaction.Date
+                  dateTimePicker.isRange false
+                  dateTimePicker.closeOnSelect true
+                  dateTimePicker.allowTextInput true
+                  //   dateTimePicker.onDateSelected (fun (d: DateTime option) ->
+                  //       JS.console.log (sprintf "onDateSelected %A" d))
+                  //   dateTimePicker.onTextChanged (fun (x: DatePicker.TextInputEventArgs) ->
+                  //       JS.console.log (sprintf "onTextChanged %A" x))
+                  //   dateTimePicker.onTextInputBlur (fun (x: DatePicker.TextInputEventArgs) ->
+                  //       JS.console.log (sprintf "onTextInputBlur %A" x))
+                  ]
+          ]
+      ]
       Html.td [
+          prop.classes [ "px-1 py-1" ]
           prop.children [
               Html.input [
+                  prop.classes [ "h-8 p-2" ]
                   match transaction.Type with
                   | Inflow (accountId, payee) ->
                       prop.value payee
@@ -220,6 +253,7 @@ let renderTransactionEditor info transaction dispatch =
           prop.children [
               Html.input [
                   prop.defaultValue transaction.Comment
+                  prop.placeholder "Comment"
                   submitChange (fun text -> { transaction with Comment = text })
                   finishWithEnter
               ]
