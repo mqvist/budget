@@ -32,8 +32,9 @@ type Msg =
     | SelectActiveAccount of AccountId
     | GotTransactions of AccountId * Transaction list
     | SelectActiveTransaction of Transaction
-    | StartTransactionEditing of Transaction
-    | CancelEditing of Transaction
+    | EditActiveTransaction of Transaction
+    | FinishEditing
+    | CancelEditing
 
 let budgetApi =
     Remoting.createApi ()
@@ -59,8 +60,7 @@ let update msg model : Model * Cmd<Msg> =
     | GotTransactions (accountId, transactions) ->
         match model with
         | NoAccounts -> failwith "Got transactions but have no accounts"
-        | AccountsLoaded accounts
-        | ViewActiveAccount { Accounts = accounts } ->
+        | AccountsLoaded accounts ->
             ViewActiveAccount
                 { Accounts = accounts
                   ActiveAccount =
@@ -69,20 +69,54 @@ let update msg model : Model * Cmd<Msg> =
                   Transactions = transactions
                   ActiveTransaction = None },
             Cmd.none
+        | ViewActiveAccount info ->
+            ViewActiveAccount
+                { info with
+                    ActiveAccount =
+                        info.Accounts
+                        |> Seq.find (fun acct -> acct.Id = accountId)
+                    Transactions = transactions },
+            Cmd.none
+
     | SelectActiveTransaction transaction ->
         match model with
         | ViewActiveAccount info ->
             ViewActiveAccount { info with ActiveTransaction = Selected transaction }, Cmd.none
         | _ -> failwith "Invalid state"
-    | StartTransactionEditing transaction ->
+
+    | EditActiveTransaction transaction ->
         match model with
         | ViewActiveAccount info ->
             ViewActiveAccount { info with ActiveTransaction = Editing transaction }, Cmd.none
         | _ -> failwith "Invalid state"
-    | CancelEditing transaction ->
+
+    | FinishEditing _ ->
         match model with
         | ViewActiveAccount info ->
-            ViewActiveAccount { info with ActiveTransaction = Selected transaction }, Cmd.none
+            match info.ActiveTransaction with
+            | Editing transaction ->
+                let cmd =
+                    Cmd.OfAsync.perform
+                        budgetApi.updateTransaction
+                        (info.ActiveAccount.Id, transaction)
+                        GotTransactions
+
+                ViewActiveAccount { info with ActiveTransaction = Selected transaction }, cmd
+            | _ -> failwith "Invalid state"
+        | _ -> failwith "Invalid state"
+
+    | CancelEditing ->
+        match model with
+        | ViewActiveAccount info ->
+            match info.ActiveTransaction with
+            | Editing transaction ->
+                let origTransaction =
+                    info.Transactions
+                    |> Seq.find (fun t -> t.Id = transaction.Id)
+
+                ViewActiveAccount { info with ActiveTransaction = Selected origTransaction },
+                Cmd.none
+            | _ -> failwith "Invalid state"
         | _ -> failwith "Invalid state"
 
 
@@ -148,6 +182,66 @@ let renderTransaction info transaction =
       | Transfer _ -> failwith "Not Implemented" ]
 
 let renderTransactionEditor info transaction dispatch =
+    let submitChange f =
+        prop.onChange (fun (text: string) -> f text |> EditActiveTransaction |> dispatch)
+
+    let finishWithEnter =
+        prop.onKeyPress (fun event ->
+            if event.charCode = 13.0 then
+                dispatch FinishEditing)
+
+    [ Html.td (formatDate transaction.Date)
+      Html.td [
+          prop.children [
+              Html.input [
+                  match transaction.Type with
+                  | Inflow (accountId, payee) ->
+                      prop.value payee
+                      submitChange (fun text -> { transaction with Type = Inflow(accountId, text) })
+                      finishWithEnter
+                  | Outflow (accountId, payee) ->
+                      prop.value payee
+                      submitChange (fun text -> { transaction with Type = Outflow(accountId, text) })
+                      finishWithEnter
+
+                  | Transfer (fromAccountId, toAccountId) ->
+                      if info.ActiveAccount.Id = fromAccountId then
+                          let toAccount = info.getAccount toAccountId
+                          prop.defaultValue $"Transfer to {toAccount.Name}"
+                      else
+                          let fromAccount = info.getAccount fromAccountId
+                          prop.defaultValue $"Transfer from {fromAccount.Name}"
+              ]
+          ]
+      ]
+
+      Html.td "category"
+      Html.td [
+          prop.children [
+              Html.input [
+                  prop.defaultValue transaction.Comment
+                  submitChange (fun text -> { transaction with Comment = text })
+                  finishWithEnter
+              ]
+          ]
+      ]
+
+      match transaction.Type with
+      | Inflow _ ->
+          Html.td ""
+          Html.td (transaction.Amount.ToString())
+      | Outflow _ ->
+          Html.td (transaction.Amount.ToString())
+          Html.td ""
+      | Transfer (fromAccountId, _) when fromAccountId = info.ActiveAccount.Id ->
+          Html.td (transaction.Amount.ToString())
+          Html.td ""
+      | Transfer (_, toAccountId) when toAccountId = info.ActiveAccount.Id ->
+          Html.td ""
+          Html.td (transaction.Amount.ToString())
+      | Transfer _ -> failwith "Not Implemented" ]
+
+let renderTransactionEditButtons transaction dispatch =
     Html.td [
         // Use relative positioning to anchor the absolute buttons
         prop.classes [ "relative"; "h-8" ]
@@ -161,6 +255,9 @@ let renderTransactionEditor info transaction dispatch =
                     "h-6 w-20"
                 ]
                 prop.text "Save"
+                prop.onClick (fun ev ->
+                    // ev.stopPropagation ()
+                    dispatch FinishEditing)
             ]
 
             Bulma.button.button [
@@ -175,7 +272,7 @@ let renderTransactionEditor info transaction dispatch =
                 prop.text "Cancel"
                 prop.onClick (fun ev ->
                     // ev.stopPropagation ()
-                    dispatch (CancelEditing transaction))
+                    dispatch CancelEditing)
             ]
         ]
     ]
@@ -193,7 +290,7 @@ let renderTransactions info dispatch =
 
                         prop.onMouseUp (fun ev ->
                             ev.stopPropagation ()
-                            dispatch (StartTransactionEditing transaction))
+                            dispatch (EditActiveTransaction t))
 
                         prop.children (renderTransaction info transaction)
                     ]
@@ -204,7 +301,7 @@ let renderTransactions info dispatch =
                             "leading-none"
                             "bg-blue-100"
                         ]
-                        prop.children (renderTransaction info transaction)
+                        prop.children (renderTransactionEditor info t dispatch)
                     ]
 
                     Html.tr [
@@ -213,7 +310,7 @@ let renderTransactions info dispatch =
                             "bg-blue-100"
                         ]
                         prop.children [
-                            renderTransactionEditor info transaction dispatch
+                            renderTransactionEditButtons t dispatch
                         ]
                     ]
 
@@ -221,7 +318,7 @@ let renderTransactions info dispatch =
                     Html.tr [
                         prop.className "leading-none"
                         prop.onMouseUp (fun ev ->
-                            ev.stopPropagation ()
+                            // ev.stopPropagation ()
                             dispatch (SelectActiveTransaction transaction))
                         prop.children (renderTransaction info transaction)
                     ]

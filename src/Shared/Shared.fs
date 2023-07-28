@@ -63,4 +63,5 @@ module Route =
 
 type IBudgetApi =
     { getAccounts: unit -> Async<Account list>
-      getTransactions: AccountId -> Async<AccountId * Transaction list> }
+      getTransactions: AccountId -> Async<AccountId * Transaction list>
+      updateTransaction: AccountId * Transaction -> Async<AccountId * Transaction list> }

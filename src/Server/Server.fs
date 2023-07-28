@@ -29,6 +29,17 @@ module Storage =
                 toAccountId = accountId
                 || fromAccountId = accountId)
 
+    let updateTransaction transaction =
+        if Transaction.isValid transaction then
+            let index =
+                transactions
+                |> Seq.findIndex (fun t -> t.Id = transaction.Id)
+
+            transactions[index] <- transaction
+            Ok()
+        else
+            Error "Invalid transaction"
+
     do
         let account1 = Account.create "Käyttötili"
         addAccount (account1)
@@ -55,7 +66,13 @@ let budgetApi =
     { getAccounts = fun () -> async { return Storage.accounts |> List.ofSeq }
       getTransactions =
         fun accountId ->
-            async { return (accountId, Storage.getTransactions accountId |> List.ofSeq) } }
+            async { return (accountId, Storage.getTransactions accountId |> List.ofSeq) }
+      updateTransaction =
+        fun (accountId, transaction) ->
+            async {
+                Storage.updateTransaction transaction |> ignore
+                return (accountId, Storage.getTransactions accountId |> List.ofSeq)
+            } }
 
 let webApp =
     Remoting.createApi ()
