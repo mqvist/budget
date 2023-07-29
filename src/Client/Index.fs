@@ -9,12 +9,12 @@ importAll "./css/style.css"
 
 type ActiveTransactionState =
     | None
-    | Selected of Transaction
+    | Selected of TransactionId
     | Editing of Transaction
 
 type ActiveAccountInfo =
     { Accounts: Account list
-      ActiveAccount: Account
+      ActiveAccountId: AccountId
       Transactions: Transaction list
       ActiveTransaction: ActiveTransactionState }
 
@@ -31,7 +31,7 @@ type Msg =
     | GotAccounts of Account list
     | SelectActiveAccount of AccountId
     | GotTransactions of AccountId * Transaction list
-    | SelectActiveTransaction of Transaction
+    | SelectActiveTransaction of TransactionId
     | EditActiveTransaction of Transaction
     | FinishEditing
     | CancelEditing
@@ -63,37 +63,30 @@ let update msg model : Model * Cmd<Msg> =
         | AccountsLoaded accounts ->
             ViewActiveAccount
                 { Accounts = accounts
-                  ActiveAccount =
-                    accounts
-                    |> Seq.find (fun acct -> acct.Id = accountId)
+                  ActiveAccountId = accountId
                   Transactions = transactions
                   ActiveTransaction = None },
             Cmd.none
         | ViewActiveAccount info ->
+            let activeTransaction =
+                match info.ActiveTransaction with
+                | Selected id ->
+                    match transactions |> Seq.tryFind (fun t -> t.Id = id) with
+                    | Some t -> Selected id
+                    | _ -> None
+                | _ -> None
+
             ViewActiveAccount
                 { info with
-                    ActiveAccount =
-                        info.Accounts
-                        |> Seq.find (fun acct -> acct.Id = accountId)
+                    ActiveAccountId = accountId
                     Transactions = transactions
-                    ActiveTransaction =
-                        match info.ActiveTransaction with
-                        | None -> None
-                        | Selected transaction
-                        | Editing transaction ->
-                            transactions
-                            |> Seq.tryFind (fun t -> t.Id = transaction.Id)
-                            |> (fun (o: Transaction option) ->
-                                if o.IsSome then
-                                    (Selected o.Value)
-                                else
-                                    None) },
+                    ActiveTransaction = activeTransaction },
             Cmd.none
 
-    | SelectActiveTransaction transaction ->
+    | SelectActiveTransaction id ->
         match model with
         | ViewActiveAccount info ->
-            ViewActiveAccount { info with ActiveTransaction = Selected transaction }, Cmd.none
+            ViewActiveAccount { info with ActiveTransaction = Selected id }, Cmd.none
         | _ -> failwith "Invalid state"
 
     | EditActiveTransaction transaction ->
@@ -110,10 +103,10 @@ let update msg model : Model * Cmd<Msg> =
                 let cmd =
                     Cmd.OfAsync.perform
                         budgetApi.updateTransaction
-                        (info.ActiveAccount.Id, transaction)
+                        (info.ActiveAccountId, transaction)
                         GotTransactions
 
-                ViewActiveAccount { info with ActiveTransaction = Selected transaction }, cmd
+                ViewActiveAccount { info with ActiveTransaction = Selected transaction.Id }, cmd
             | _ -> failwith "Invalid state"
         | _ -> failwith "Invalid state"
 
@@ -122,20 +115,14 @@ let update msg model : Model * Cmd<Msg> =
         | ViewActiveAccount info ->
             match info.ActiveTransaction with
             | Editing transaction ->
-                let origTransaction =
-                    info.Transactions
-                    |> Seq.find (fun t -> t.Id = transaction.Id)
-
-                ViewActiveAccount { info with ActiveTransaction = Selected origTransaction },
+                ViewActiveAccount { info with ActiveTransaction = Selected transaction.Id },
                 Cmd.none
             | _ -> failwith "Invalid state"
         | _ -> failwith "Invalid state"
 
-
 open Feliz
 open Feliz.Bulma
 open System
-
 
 let formatDate (date: DateTime) =
     $"%02d{date.Day}.%02d{date.Month}.{date.Year}"
@@ -169,7 +156,7 @@ let renderTransaction info transaction =
       | Inflow (_, payee)
       | Outflow (_, payee) -> Html.td payee
       | Transfer (fromAccountId, toAccountId) ->
-          if info.ActiveAccount.Id = fromAccountId then
+          if info.ActiveAccountId = fromAccountId then
               let toAccount = info.getAccount toAccountId
               Html.td $"Transfer to {toAccount.Name}"
           else
@@ -186,10 +173,10 @@ let renderTransaction info transaction =
       | Outflow _ ->
           Html.td (transaction.Amount.ToString())
           Html.td ""
-      | Transfer (fromAccountId, _) when fromAccountId = info.ActiveAccount.Id ->
+      | Transfer (fromAccountId, _) when fromAccountId = info.ActiveAccountId ->
           Html.td (transaction.Amount.ToString())
           Html.td ""
-      | Transfer (_, toAccountId) when toAccountId = info.ActiveAccount.Id ->
+      | Transfer (_, toAccountId) when toAccountId = info.ActiveAccountId ->
           Html.td ""
           Html.td (transaction.Amount.ToString())
       | Transfer _ -> failwith "Not Implemented" ]
@@ -238,7 +225,7 @@ let renderTransactionEditor info transaction dispatch =
                       finishWithEnter
 
                   | Transfer (fromAccountId, toAccountId) ->
-                      if info.ActiveAccount.Id = fromAccountId then
+                      if info.ActiveAccountId = fromAccountId then
                           let toAccount = info.getAccount toAccountId
                           prop.defaultValue $"Transfer to {toAccount.Name}"
                       else
@@ -267,10 +254,10 @@ let renderTransactionEditor info transaction dispatch =
       | Outflow _ ->
           Html.td (transaction.Amount.ToString())
           Html.td ""
-      | Transfer (fromAccountId, _) when fromAccountId = info.ActiveAccount.Id ->
+      | Transfer (fromAccountId, _) when fromAccountId = info.ActiveAccountId ->
           Html.td (transaction.Amount.ToString())
           Html.td ""
-      | Transfer (_, toAccountId) when toAccountId = info.ActiveAccount.Id ->
+      | Transfer (_, toAccountId) when toAccountId = info.ActiveAccountId ->
           Html.td ""
           Html.td (transaction.Amount.ToString())
       | Transfer _ -> failwith "Not Implemented" ]
@@ -316,7 +303,7 @@ let renderTransactions info dispatch =
         prop.children [
             for transaction in info.Transactions do
                 match info.ActiveTransaction with
-                | Selected t when transaction.Id = t.Id ->
+                | Selected id when transaction.Id = id ->
                     Html.tr [
                         prop.classes [
                             "leading-none bg-blue-100"
@@ -324,7 +311,7 @@ let renderTransactions info dispatch =
 
                         prop.onMouseUp (fun ev ->
                             ev.stopPropagation ()
-                            dispatch (EditActiveTransaction t))
+                            dispatch (EditActiveTransaction transaction))
 
                         prop.children (renderTransaction info transaction)
                     ]
@@ -353,7 +340,7 @@ let renderTransactions info dispatch =
                         prop.className "leading-none"
                         prop.onMouseUp (fun ev ->
                             // ev.stopPropagation ()
-                            dispatch (SelectActiveTransaction transaction))
+                            dispatch (SelectActiveTransaction transaction.Id))
                         prop.children (renderTransaction info transaction)
                     ]
         ]
@@ -366,7 +353,7 @@ let renderMainView model dispatch =
         | AccountsLoaded _ -> Html.none
         | ViewActiveAccount info ->
             Bulma.block [
-                Bulma.title info.ActiveAccount.Name
+                Bulma.title (info.getAccount info.ActiveAccountId).Name
                 Bulma.tableContainer [
                     Bulma.table [
                         table.isFullWidth
@@ -407,7 +394,7 @@ let renderAccountList model dispatch =
                     for account in info.Accounts do
                         Html.li [
                             prop.text account.Name
-                            if account.Id = info.ActiveAccount.Id then
+                            if account.Id = info.ActiveAccountId then
                                 prop.classes [
                                     "rounded-md px-4 py-1 bg-sky-600"
                                 ]
